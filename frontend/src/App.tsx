@@ -4,12 +4,14 @@ import { Sidebar } from './components/Sidebar';
 import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Workspace } from './pages/Workspace';
-import { Documents } from './pages/Documents';
+import DocumentsPage from './pages/Documents';
 import FolderPage from './pages/Folder';
 import { Menu } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { supabase } from './lib/supabase';
 import type { User } from '@supabase/supabase-js';
+import { ToastProvider } from './components/ui/toast';
+import { Toaster } from './components/ui/toaster';
 
 function App() {
   const [user, setUser] = useState<User | null>(null);
@@ -48,34 +50,37 @@ function App() {
 
   return (
     <Router>
-      <div className="min-h-screen bg-white">
-        {/* Mobile menu button */}
-        <div className="lg:hidden fixed top-4 left-4 z-50">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-          >
-            <Menu className="h-4 w-4" />
-          </Button>
-        </div>
+      <ToastProvider>
+        <div className="min-h-screen bg-white">
+          {/* Mobile menu button */}
+          <div className="lg:hidden fixed top-4 left-4 z-50">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+            >
+              <Menu className="h-4 w-4" />
+            </Button>
+          </div>
 
-        {/* Sidebar */}
-        <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
+          {/* Sidebar */}
+          <Sidebar isOpen={sidebarOpen} onToggle={() => setSidebarOpen(!sidebarOpen)} />
 
-        {/* Main content */}
-        <div className="lg:ml-64 min-h-screen">
-          <Routes>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/workspace" element={<Workspace />} />
-            <Route path="/documents" element={<Documents />} />
-            <Route path="/folders/:id" element={<FolderPage />} />
-            <Route path="/flashcards" element={<div className="p-6"><h1 className="text-3xl font-bold">Flashcards</h1><p className="text-muted-foreground">Coming soon...</p></div>} />
-            <Route path="/knowledge-map" element={<div className="p-6"><h1 className="text-3xl font-bold">Knowledge Map</h1><p className="text-muted-foreground">Coming soon...</p></div>} />
-          </Routes>
+          {/* Main content */}
+          <div className="lg:ml-64 min-h-screen">
+            <Routes>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/workspace" element={<Workspace />} />
+              <Route path="/documents" element={<DocumentsPage />} />
+              <Route path="/folders/:id" element={<FolderPage />} />
+              <Route path="/flashcards" element={<div className="p-6"><h1 className="text-3xl font-bold">Flashcards</h1><p className="text-muted-foreground">Coming soon...</p></div>} />
+              <Route path="/knowledge-map" element={<div className="p-6"><h1 className="text-3xl font-bold">Knowledge Map</h1><p className="text-muted-foreground">Coming soon...</p></div>} />
+            </Routes>
+          </div>
         </div>
-      </div>
+        <Toaster />
+      </ToastProvider>
     </Router>
   );
 }

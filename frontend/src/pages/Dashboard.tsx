@@ -10,6 +10,7 @@ import {
   Plus
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import AIQA from '@/components/AIQA'; // Mentor: add widget to dashboard
 
 type Stats = {
   streak: number;
@@ -194,6 +195,43 @@ export function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Mentor on Dashboard */}
+      <div className="grid grid-cols-1 gap-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Mentor</CardTitle>
+            <CardDescription>Ask questions about your documents</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {/* Mentor: reuse existing AI component */}
+            <DashboardMentor />
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
+}
+
+// Mentor: lightweight wrapper to render AI widget on Dashboard
+function DashboardMentor() {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const load = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setUser(user);
+      setLoading(false);
+    };
+    load();
+  }, []);
+
+  if (loading) {
+    return <p className="text-sm text-muted-foreground">Loading…</p>;
+  }
+  if (!user) {
+    return <p className="text-sm text-muted-foreground">Sign in to chat with Mentor.</p>;
+  }
+  return <AIQA userId={user.id} />;
 }

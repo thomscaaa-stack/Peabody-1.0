@@ -1,151 +1,167 @@
-import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Upload, FileText, Search, Filter, Download, Trash2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react'
+import { FileText, Upload, MessageSquare, X } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
+import type { Document } from '@/lib/types'
+import PDFUpload from '@/components/PDFUpload'
+import DocumentList from '@/components/DocumentList'
+import PDFReader from '@/components/PDFReader'
+import AIQA from '@/components/AIQA'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
-export function Documents() {
+export default function DocumentsPage() {
+  const [user, setUser] = useState<any>(null)
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null)
+  const [showUpload, setShowUpload] = useState(false)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      setUser(user)
+    }
+    getUser()
+  }, [])
+
+  const handleUploadComplete = (document: Document) => {
+    setShowUpload(false)
+    setRefreshTrigger(prev => prev + 1)
+  }
+
+  const handleDocumentSelect = (document: Document) => {
+    setSelectedDocument(document)
+  }
+
+  const handleDocumentDelete = (documentId: string) => {
+    if (selectedDocument?.id === documentId) {
+      setSelectedDocument(null)
+    }
+    setRefreshTrigger(prev => prev + 1)
+  }
+
+  const handleCloseViewer = () => {
+    setSelectedDocument(null)
+  }
+
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
   return (
-    <div className="p-6 space-y-6">
+    <div className="max-w-7xl mx-auto p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Documents</h1>
-          <p className="text-muted-foreground">Manage your study materials and uploads</p>
-        </div>
-        <Button>
-          <Upload className="h-4 w-4 mr-2" />
-          Upload Document
-        </Button>
-      </div>
-
-      {/* Search and Filter */}
-      <div className="flex gap-4">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search documents..."
-            className="pl-10"
-          />
-        </div>
-        <Button variant="outline">
-          <Filter className="h-4 w-4 mr-2" />
-          Filter
-        </Button>
-      </div>
-
-      {/* Upload Area */}
-      <Card className="border-dashed border-2">
-        <CardContent className="p-12 text-center">
-          <Upload className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="text-lg font-semibold mb-2">Upload Study Materials</h3>
-          <p className="text-muted-foreground mb-4">
-            Drag and drop your documents here, or click to browse. Supports PDF, DOCX, TXT, and more.
+          <h1 className="text-3xl font-bold text-gray-900">Documents</h1>
+          <p className="text-gray-600 mt-1">
+            Upload, view, and analyze your PDF documents with AI
           </p>
-          <Button variant="outline">
-            Choose Files
-          </Button>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Documents List */}
-      <div className="space-y-4">
-        <h2 className="text-xl font-semibold">Recent Documents</h2>
-        
-        <div className="space-y-3">
-          <Card className="hover:shadow-md transition-shadow">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-8 w-8 text-primary" />
-                  <div>
-                    <h3 className="font-medium">React Fundamentals.pdf</h3>
-                    <p className="text-sm text-muted-foreground">Uploaded 2 hours ago • 2.3 MB</p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline">
-                    <Download className="h-4 w-4" />
-                  </Button>
-                  <Button size="sm" variant="outline">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+        <Button onClick={() => setShowUpload(true)} className="flex items-center space-x-2">
+          <Upload className="w-4 h-4" />
+          <span>Upload PDF</span>
+        </Button>
+      </div>
 
-          <Card className="hover:shadow-md transition-shadow">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-8 w-8 text-primary" />
-                  <div>
-                    <h3 className="font-medium">TypeScript Handbook.docx</h3>
-                    <p className="text-sm text-muted-foreground">Uploaded yesterday • 1.8 MB</p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline">
-                    <Download className="h-4 w-4" />
-                  </Button>
-                  <Button size="sm" variant="outline">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      {/* Main Content */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left Column - Document Management */}
+        <div className="lg:col-span-2 space-y-6">
+          <Tabs defaultValue="documents" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="documents" className="flex items-center space-x-2">
+                <FileText className="w-4 h-4" />
+                <span>Documents</span>
+              </TabsTrigger>
+              <TabsTrigger value="ai" className="flex items-center space-x-2">
+                <MessageSquare className="w-4 h-4" />
+                <span>Mentor</span>
+              </TabsTrigger>
+            </TabsList>
 
-          <Card className="hover:shadow-md transition-shadow">
-            <CardContent className="p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-8 w-8 text-primary" />
-                  <div>
-                    <h3 className="font-medium">JavaScript Notes.txt</h3>
-                    <p className="text-sm text-muted-foreground">Uploaded 3 days ago • 156 KB</p>
-                  </div>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline">
-                    <Download className="h-4 w-4" />
+            <TabsContent value="documents" className="space-y-4">
+              <DocumentList
+                onDocumentSelect={handleDocumentSelect}
+                onDocumentDelete={handleDocumentDelete}
+                refreshTrigger={refreshTrigger}
+              />
+            </TabsContent>
+
+            <TabsContent value="ai" className="space-y-4">
+              <AIQA userId={user.id} />
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* Right Column - PDF Viewer */}
+        <div className="lg:col-span-1">
+          {selectedDocument ? (
+            <Card className="h-[calc(100vh-200px)]">
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg truncate">
+                    {selectedDocument.title}
+                  </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCloseViewer}
+                  >
+                    <X className="w-4 h-4" />
                   </Button>
-                  <Button size="sm" variant="outline">
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent className="p-0 h-full">
+                <PDFReader document={selectedDocument} onClose={handleCloseViewer} />
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="h-[calc(100vh-200px)]">
+              <CardContent className="flex items-center justify-center h-full">
+                <div className="text-center">
+                  <FileText className="mx-auto w-12 h-12 text-gray-400 mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    Select a Document
+                  </h3>
+                  <p className="text-gray-600">
+                    Choose a document from the list to view it here.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
 
-      {/* AI Processing Status */}
-      <Card>
-        <CardHeader>
-          <CardTitle>AI Processing Status</CardTitle>
-          <CardDescription>Documents being analyzed by AI</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>
-                <span className="text-sm">React Fundamentals.pdf</span>
+      {/* Upload Modal */}
+      {showUpload && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-semibold">Upload PDF Document</h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowUpload(false)}
+                >
+                  <X className="w-4 h-4" />
+                </Button>
               </div>
-              <span className="text-sm text-muted-foreground">Processing...</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span className="text-sm">TypeScript Handbook.docx</span>
-              </div>
-              <span className="text-sm text-muted-foreground">Complete</span>
+
+              <PDFUpload
+                onUploadComplete={handleUploadComplete}
+              />
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
     </div>
-  );
+  )
 }

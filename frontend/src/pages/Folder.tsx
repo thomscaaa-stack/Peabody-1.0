@@ -1,9 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import SearchInput from '@/components/SearchInput'
-import DocumentList, { DocItem } from '@/components/DocumentList'
+import DocumentList from '@/components/DocumentList'
+import type { Document as PdfDocument, DocItem } from '@/lib/types'
+import PDFReader from '@/components/PDFReader'
+import SplitPane from '@/components/SplitPane'
 import NoteCard, { NoteItem } from '@/components/NoteCard'
 import NotesEditor from '@/components/NotesEditor'
 import { Link, useParams } from 'react-router-dom'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { supabase } from '@/lib/supabase'
 import { htmlToPlain } from '@/lib/text'
 
@@ -13,12 +17,13 @@ export default function FolderPage() {
     const { id } = useParams()
     const folderId = id ?? null
     const [query, setQuery] = useState('')
-    const [selectedDocId, setSelectedDocId] = useState<string | null>(null)
+    const [selectedDocument, setSelectedDocument] = useState<PdfDocument | null>(null)
     const [selectedNote, setSelectedNote] = useState<{ id: string | null; title: string; content: string } | null>(null)
     const [title, setTitle] = useState('')
     const [documents, setDocuments] = useState<DocItem[]>([])
     const [notes, setNotes] = useState<NoteItem[]>([])
     const [meta, setMeta] = useState<{ docs: number; notes: number }>({ docs: 0, notes: 0 })
+    const [isDesktop, setIsDesktop] = useState<boolean>(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true)
 
     useEffect(() => {
         const load = async () => {
@@ -49,6 +54,13 @@ export default function FolderPage() {
         }
         load()
     }, [folderId])
+
+    // Track breakpoint to avoid mounting duplicate viewers
+    useEffect(() => {
+        const onResize = () => setIsDesktop(window.innerWidth >= 1024)
+        window.addEventListener('resize', onResize)
+        return () => window.removeEventListener('resize', onResize)
+    }, [])
 
     // Load a single note when selected
     useEffect(() => {
@@ -120,54 +132,111 @@ export default function FolderPage() {
 
             </div>
 
-            <div className="grid gap-8 xl:grid-cols-[420px_1fr]">
-                <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold text-gray-900">Study Materials</h2>
-                        <button className="rounded-lg bg-blue-600 text-white px-3 py-1.5 text-sm hover:bg-blue-700" onClick={() => setSelectedNote({ id: null, title: '', content: '<p></p>' })}>New Note</button>
-                    </div>
-
-                    <SearchInput value={query} onChange={setQuery} />
-
-                    <DocumentList documents={filteredDocs} selectedId={selectedDocId} onSelect={setSelectedDocId} />
-
-                    <div className="text-xs font-medium text-gray-500 tracking-wide mt-6">RECENT NOTES</div>
-                    <div className="space-y-2">
-                        {filteredNotes.map(n => (
-                            <NoteCard key={n.id} note={n} selected={selectedNote?.id === n.id} onSelect={(id) => setSelectedNote({ id, title: '', content: '' })} />
-                        ))}
-                    </div>
-
-                    {selectedDocId && (
-                        <div className="mt-6 h-56 grid place-items-center border rounded-xl text-sm text-gray-500">
-                            Document preview placeholder (PDF)
-                        </div>
-                    )}
-                </div>
-
-                <div>
-                    {!selectedNote ? (
-                        <div className="h-[calc(100vh-220px)] border rounded-xl grid place-items-center text-center text-gray-500">
-                            <div className="space-y-3">
-                                <div className="mx-auto w-16 h-16 rounded-full bg-gray-100 grid place-items-center">📄</div>
-                                <div className="text-lg font-semibold text-gray-900">Start taking notes</div>
-                                <div className="text-sm">Create a new note or select one from the list</div>
-                                <button className="rounded-lg bg-blue-600 text-white px-3 py-1.5 text-sm hover:bg-blue-700" onClick={() => setSelectedNote({ id: null, title: '', content: '<p></p>' })}>Create New Note</button>
-                            </div>
+            {/* Primary content region: PDF dominant; notes join as split on desktop */}
+            {selectedDocument ? (
+                <>
+                    {isDesktop ? (
+                        <div className="h-[calc(100vh-220px)]">
+                            {selectedNote ? (
+                                <SplitPane
+                                    left={<PDFReader document={selectedDocument} onClose={() => setSelectedDocument(null)} />}
+                                    right={<NotesEditor key={selectedNote.id ?? 'new'} noteId={selectedNote.id} initialTitle={selectedNote.title || 'Untitled'} initialHTML={selectedNote.content || '<p></p>'} folderId={folderId} onSaved={onSaved} onDelete={deleteNote} />}
+                                    storageKey="folder_split_width"
+                                />
+                            ) : (
+                                <div className="h-full border rounded-xl overflow-hidden">
+                                    <PDFReader document={selectedDocument} onClose={() => setSelectedDocument(null)} />
+                                </div>
+                            )}
                         </div>
                     ) : (
-                        <NotesEditor
-                            key={selectedNote.id ?? 'new'}
-                            noteId={selectedNote.id}
-                            initialTitle={selectedNote.title || 'Untitled'}
-                            initialHTML={selectedNote.content || '<p></p>'}
-                            folderId={folderId}
-                            onSaved={onSaved}
-                            onDelete={deleteNote}
-                        />
+                        <div className="h-[calc(100vh-220px)]">
+                            {selectedNote ? (
+                                <Tabs defaultValue="pdf" className="h-full">
+                                    <TabsList className="grid grid-cols-2 w-full">
+                                        <TabsTrigger value="pdf">PDF</TabsTrigger>
+                                        <TabsTrigger value="notes">Notes</TabsTrigger>
+                                    </TabsList>
+                                    <TabsContent value="pdf" className="h-[calc(100%-40px)] border rounded-xl overflow-hidden">
+                                        <PDFReader document={selectedDocument} onClose={() => setSelectedDocument(null)} />
+                                    </TabsContent>
+                                    <TabsContent value="notes" className="h-[calc(100%-40px)]">
+                                        <NotesEditor
+                                            key={selectedNote.id ?? 'new'}
+                                            noteId={selectedNote.id}
+                                            initialTitle={selectedNote.title || 'Untitled'}
+                                            initialHTML={selectedNote.content || '<p></p>'}
+                                            folderId={folderId}
+                                            onSaved={onSaved}
+                                            onDelete={deleteNote}
+                                        />
+                                    </TabsContent>
+                                </Tabs>
+                            ) : (
+                                <div className="h-full border rounded-xl overflow-hidden">
+                                    <PDFReader document={selectedDocument} onClose={() => setSelectedDocument(null)} />
+                                </div>
+                            )}
+                        </div>
                     )}
+
+                    {/* Study Materials moved below when a PDF is open */}
+                    <div className="space-y-4 mt-8">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-semibold text-gray-900">Study Materials</h2>
+                            <button className="rounded-lg bg-blue-600 text-white px-3 py-1.5 text-sm hover:bg-blue-700" onClick={() => setSelectedNote({ id: null, title: '', content: '<p></p>' })}>New Note</button>
+                        </div>
+                        <SearchInput value={query} onChange={setQuery} />
+                        <DocumentList onDocumentSelect={(doc) => setSelectedDocument(doc as any)} />
+                        <div className="text-xs font-medium text-gray-500 tracking-wide mt-6">RECENT NOTES</div>
+                        <div className="space-y-2">
+                            {filteredNotes.map(n => (
+                                <NoteCard key={n.id} note={n} selected={selectedNote?.id === n.id} onSelect={(id) => setSelectedNote({ id, title: '', content: '' })} />)
+                            )}
+                        </div>
+                    </div>
+                </>
+            ) : (
+                // Default layout when no PDF is open
+                <div className="grid gap-8 xl:grid-cols-[420px_1fr]">
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <h2 className="text-lg font-semibold text-gray-900">Study Materials</h2>
+                            <button className="rounded-lg bg-blue-600 text-white px-3 py-1.5 text-sm hover:bg-blue-700" onClick={() => setSelectedNote({ id: null, title: '', content: '<p></p>' })}>New Note</button>
+                        </div>
+                        <SearchInput value={query} onChange={setQuery} />
+                        <DocumentList onDocumentSelect={(doc) => setSelectedDocument(doc as any)} />
+                        <div className="text-xs font-medium text-gray-500 tracking-wide mt-6">RECENT NOTES</div>
+                        <div className="space-y-2">
+                            {filteredNotes.map(n => (
+                                <NoteCard key={n.id} note={n} selected={selectedNote?.id === n.id} onSelect={(id) => setSelectedNote({ id, title: '', content: '' })} />
+                            ))}
+                        </div>
+                    </div>
+                    <div>
+                        {!selectedNote ? (
+                            <div className="h-[calc(100vh-220px)] border rounded-xl grid place-items-center text-center text-gray-500">
+                                <div className="space-y-3">
+                                    <div className="mx-auto w-16 h-16 rounded-full bg-gray-100 grid place-items-center">📄</div>
+                                    <div className="text-lg font-semibold text-gray-900">Start taking notes</div>
+                                    <div className="text-sm">Open a document to start reading, or create a note</div>
+                                    <button className="rounded-lg bg-blue-600 text-white px-3 py-1.5 text-sm hover:bg-blue-700" onClick={() => setSelectedNote({ id: null, title: '', content: '<p></p>' })}>Create New Note</button>
+                                </div>
+                            </div>
+                        ) : (
+                            <NotesEditor
+                                key={selectedNote.id ?? 'new'}
+                                noteId={selectedNote.id}
+                                initialTitle={selectedNote.title || 'Untitled'}
+                                initialHTML={selectedNote.content || '<p></p>'}
+                                folderId={folderId}
+                                onSaved={onSaved}
+                                onDelete={deleteNote}
+                            />
+                        )}
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     )
 }

@@ -52,8 +52,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
           {/* Header */}
           <div className="flex items-center justify-between p-6 border-b border-border">
             <div className="flex items-center gap-2">
-              <img src="/favicon-32x32.png" alt="Peabody logo" className="h-6 w-6" />
-              <span className="text-xl font-bold text-primary">eabody</span>
+              <img src="/Banner.png" alt="Peabody logo" className="h-[7.5rem] w-auto object-contain" />
             </div>
             <Button
               variant="ghost"
