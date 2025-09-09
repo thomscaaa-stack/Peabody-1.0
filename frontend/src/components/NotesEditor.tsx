@@ -4,6 +4,10 @@ import StarterKit from '@tiptap/starter-kit'
 import Link from '@tiptap/extension-link'
 import Placeholder from '@tiptap/extension-placeholder'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
+import Underline from '@tiptap/extension-underline'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
+import { Extension } from '@tiptap/core'
 import { createLowlight, common } from 'lowlight'
 import { supabase } from '@/lib/supabase'
 import 'prosemirror-view/style/prosemirror.css'
@@ -31,12 +35,49 @@ export default function NotesEditor({ noteId, folderId, initialTitle = '', initi
 
     const lowlight = createLowlight(common)
 
+    const IndentShortcuts = Extension.create({
+        name: 'indentShortcuts',
+        addKeyboardShortcuts() {
+            return {
+                Tab: ({ editor }) => {
+                    if (editor.isActive('codeBlock')) {
+                        return editor.chain().focus().insertContent('\t').run()
+                    }
+                    if (editor.isActive('taskItem')) {
+                        return editor.chain().sinkListItem('taskItem').run()
+                    }
+                    if (editor.isActive('listItem')) {
+                        return editor.chain().sinkListItem('listItem').run()
+                    }
+                    return false
+                },
+                'Shift-Tab': ({ editor }) => {
+                    if (editor.isActive('taskItem')) {
+                        return editor.chain().liftListItem('taskItem').run()
+                    }
+                    if (editor.isActive('listItem')) {
+                        return editor.chain().liftListItem('listItem').run()
+                    }
+                    return false
+                },
+            }
+        },
+    })
+
     const editor = useEditor({
         extensions: [
-            StarterKit.configure({ codeBlock: false, link: false }),
+            StarterKit.configure({
+                codeBlock: false,
+                link: false,
+                heading: { levels: [1, 2, 3] },
+            }),
             Link.configure({ openOnClick: false }),
             CodeBlockLowlight.configure({ lowlight }),
             Placeholder.configure({ placeholder: 'Write your notes…' }),
+            Underline,
+            TaskList,
+            TaskItem.configure({ nested: true }),
+            IndentShortcuts,
         ],
         content: initialHTML,
     })
@@ -159,11 +200,16 @@ export default function NotesEditor({ noteId, folderId, initialTitle = '', initi
                 {/* Minimal toolbar using document.execCommand fallbacks for brevity */}
                 <button className="px-2 py-1 text-sm rounded-lg border" onClick={() => editor?.chain().focus().toggleBold().run()} aria-pressed={editor?.isActive('bold')}>B</button>
                 <button className="px-2 py-1 text-sm rounded-lg border" onClick={() => editor?.chain().focus().toggleItalic().run()} aria-pressed={editor?.isActive('italic')}>I</button>
+                <button className="px-2 py-1 text-sm rounded-lg border" onClick={() => editor?.chain().focus().toggleUnderline().run()} aria-pressed={editor?.isActive('underline')}>U</button>
+                <button className="px-2 py-1 text-sm rounded-lg border" onClick={() => editor?.chain().focus().toggleStrike().run()} aria-pressed={editor?.isActive('strike')}>S</button>
                 <button className="px-2 py-1 text-sm rounded-lg border" onClick={() => editor?.chain().focus().toggleHeading({ level: 1 }).run()} aria-pressed={editor?.isActive('heading', { level: 1 })}>H1</button>
                 <button className="px-2 py-1 text-sm rounded-lg border" onClick={() => editor?.chain().focus().toggleHeading({ level: 2 }).run()} aria-pressed={editor?.isActive('heading', { level: 2 })}>H2</button>
                 <button className="px-2 py-1 text-sm rounded-lg border" onClick={() => editor?.chain().focus().toggleHeading({ level: 3 }).run()} aria-pressed={editor?.isActive('heading', { level: 3 })}>H3</button>
                 <button className="px-2 py-1 text-sm rounded-lg border" onClick={() => editor?.chain().focus().toggleBulletList().run()} aria-pressed={editor?.isActive('bulletList')}>• List</button>
                 <button className="px-2 py-1 text-sm rounded-lg border" onClick={() => editor?.chain().focus().toggleOrderedList().run()} aria-pressed={editor?.isActive('orderedList')}>1. List</button>
+                <button className="px-2 py-1 text-sm rounded-lg border" onClick={() => editor?.chain().focus().toggleTaskList().run()} aria-pressed={editor?.isActive('taskList')}>☑ Task</button>
+                <button className="px-2 py-1 text-sm rounded-lg border" onClick={() => editor?.chain().focus().toggleBlockquote().run()} aria-pressed={editor?.isActive('blockquote')}>❝</button>
+                <button className="px-2 py-1 text-sm rounded-lg border" onClick={() => editor?.chain().focus().toggleCode().run()} aria-pressed={editor?.isActive('code')}>`code`</button>
                 <button className="px-2 py-1 text-sm rounded-lg border" onClick={() => editor?.chain().focus().toggleCodeBlock().run()} aria-pressed={editor?.isActive('codeBlock')}>Code</button>
                 <button className="px-2 py-1 text-sm rounded-lg border" onClick={() => editor?.chain().focus().setLink({ href: prompt('Link URL') || '' }).run()}>Link</button>
             </div>
