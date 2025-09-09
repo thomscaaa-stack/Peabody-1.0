@@ -38,4 +38,56 @@ export type CalendarEvent = {
     allDay: boolean
 }
 
+export type StudySession = {
+    id: string
+    title: string
+    start_at: string
+    end_at: string
+    document_id?: string | null
+}
+
+export type TaskItem = {
+    id: string
+    title: string
+    due_at: string | null
+    status?: 'open' | 'done'
+    document_id?: string | null
+}
+
+export function startOfDay(d: Date): Date {
+    const x = new Date(d); x.setHours(0, 0, 0, 0); return x
+}
+
+export function endOfDay(d: Date): Date {
+    const x = new Date(d); x.setHours(23, 59, 59, 999); return x
+}
+
+export function startOfWeek(d: Date): Date {
+    const x = startOfDay(d)
+    const day = x.getDay()
+    const diff = (day + 6) % 7
+    x.setDate(x.getDate() - diff)
+    return x
+}
+
+export function endOfWeek(d: Date): Date {
+    const x = startOfWeek(d)
+    x.setDate(x.getDate() + 6)
+    x.setHours(23, 59, 59, 999)
+    return x
+}
+
+export function findStudyBlockStart(dueIso: string | null, minutes: number): { start: string, end: string } | null {
+    if (!dueIso) return null
+    const due = new Date(dueIso)
+    const end = new Date(due.getTime() - 15 * 60 * 1000)
+    const start = new Date(end.getTime() - minutes * 60 * 1000)
+    if (start < new Date()) {
+        const now = new Date()
+        const newEnd = new Date(now.getTime() + minutes * 60 * 1000)
+        return { start: now.toISOString(), end: newEnd.toISOString() }
+    }
+    return { start: start.toISOString(), end: end.toISOString() }
+}
+
 

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import UpcomingDeadlinesCard from '@/components/calendar/UpcomingDeadlinesCard';
 import {
   TrendingUp,
   Clock,
@@ -144,7 +145,7 @@ export function Dashboard() {
         </Card>
       </div>
 
-      {/* Recent Activity & Quick Actions */}
+      {/* Recent Activity (left) & Upcoming/Quick Actions (right) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Recent Activity */}
         <Card>
@@ -169,31 +170,34 @@ export function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
-            <CardDescription>Get started with your next study session</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Button className="w-full justify-start" variant="outline">
-              <Upload className="h-4 w-4 mr-2" />
-              Upload Document
-            </Button>
-            <Button className="w-full justify-start" variant="outline">
-              <BookOpen className="h-4 w-4 mr-2" />
-              Start Study Session
-            </Button>
-            <Button className="w-full justify-start" variant="outline">
-              <Target className="h-4 w-4 mr-2" />
-              Set Study Goal
-            </Button>
-            <Button className="w-full justify-start" variant="outline">
-              <TrendingUp className="h-4 w-4 mr-2" />
-              View Progress
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="space-y-6">
+          <UpcomingDeadlinesCard />
+          {/* Quick Actions */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick Actions</CardTitle>
+              <CardDescription>Get started with your next study session</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Button className="w-full justify-start" variant="outline">
+                <Upload className="h-4 w-4 mr-2" />
+                Upload Document
+              </Button>
+              <Button className="w-full justify-start" variant="outline">
+                <BookOpen className="h-4 w-4 mr-2" />
+                Start Study Session
+              </Button>
+              <Button className="w-full justify-start" variant="outline">
+                <Target className="h-4 w-4 mr-2" />
+                Set Study Goal
+              </Button>
+              <Button className="w-full justify-start" variant="outline">
+                <TrendingUp className="h-4 w-4 mr-2" />
+                View Progress
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
       {/* Mentor on Dashboard */}

@@ -5,6 +5,7 @@ import { Login } from './pages/Login';
 import { Dashboard } from './pages/Dashboard';
 import { Workspace } from './pages/Workspace';
 import DocumentsPage from './pages/Documents';
+import CalendarPage from './pages/Calendar';
 import FolderPage from './pages/Folder';
 import { Menu } from 'lucide-react';
 import { Button } from './components/ui/button';
@@ -73,6 +74,7 @@ function App() {
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/workspace" element={<Workspace />} />
               <Route path="/documents" element={<DocumentsPage />} />
+              <Route path="/calendar" element={<CalendarPage />} />
               <Route path="/folders/:id" element={<FolderPage />} />
               <Route path="/flashcards" element={<div className="p-6"><h1 className="text-3xl font-bold">Flashcards</h1><p className="text-muted-foreground">Coming soon...</p></div>} />
               <Route path="/knowledge-map" element={<div className="p-6"><h1 className="text-3xl font-bold">Knowledge Map</h1><p className="text-muted-foreground">Coming soon...</p></div>} />

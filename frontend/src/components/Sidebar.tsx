@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -6,15 +6,13 @@ import {
   FileText,
   Brain,
   Map,
+  Calendar as CalendarIcon,
   LogOut,
   X
 } from 'lucide-react';
 import { Button } from './ui/button';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
-import ConnectCanvas from '@/components/calendar/ConnectCanvas';
-import UpcomingList from '@/components/calendar/UpcomingList';
-import type { CalendarEvent } from '@/lib/calendar/date';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -25,65 +23,19 @@ const navigationItems = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Workspace', href: '/workspace', icon: BookOpen },
   { name: 'Documents', href: '/documents', icon: FileText },
+  { name: 'Calendar', href: '/calendar', icon: CalendarIcon },
   { name: 'Flashcards', href: '/flashcards', icon: Brain },
   { name: 'Knowledge Map', href: '/knowledge-map', icon: Map },
 ];
 
 export function Sidebar({ isOpen, onToggle }: SidebarProps) {
   const location = useLocation();
-  const [token, setToken] = useState<string | null>(null)
-  const [events, setEvents] = useState<CalendarEvent[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
   };
 
-  // Load token on mount
-  useEffect(() => {
-    const t = localStorage.getItem('canvasIcsToken')
-    if (t) setToken(t)
-  }, [])
 
-  const refreshEvents = async () => {
-    const t = token || localStorage.getItem('canvasIcsToken')
-    if (!t) return
-    try {
-      setLoading(true)
-      setError(null)
-      const res = await fetch(`/api/feeds/events?token=${encodeURIComponent(t)}`)
-      if (res.status === 401) {
-        // expired/invalid
-        localStorage.removeItem('canvasIcsToken')
-        setToken(null)
-        setEvents([])
-        setError('Connection expired. Please reconnect.')
-        return
-      }
-      if (!res.ok) throw new Error('Failed to load events')
-      const data = await res.json()
-      setEvents(Array.isArray(data?.events) ? data.events : [])
-    } catch (e: any) {
-      setError(e?.message || 'Failed to load events')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { if (token) refreshEvents() }, [token])
-
-  const onConnected = (tkn: string) => {
-    setToken(tkn)
-    refreshEvents()
-  }
-
-  const disconnect = () => {
-    localStorage.removeItem('canvasIcsToken')
-    setToken(null)
-    setEvents([])
-    setError(null)
-  }
 
   return (
     <>
@@ -146,25 +98,7 @@ export function Sidebar({ isOpen, onToggle }: SidebarProps) {
             })}
           </nav>
 
-          {/* Calendar Section */}
-          <div className="p-4 border-t space-y-3">
-            <h2 className="text-sm font-semibold">Calendar</h2>
-            {!token ? (
-              <div className="rounded-2xl border p-3">
-                <div className="text-sm mb-2">Connect your Canvas Calendar</div>
-                <ConnectCanvas onConnected={onConnected} />
-              </div>
-            ) : (
-              <UpcomingList
-                token={token}
-                events={events}
-                loading={loading}
-                error={error}
-                onRefresh={refreshEvents}
-                onDisconnect={disconnect}
-              />
-            )}
-          </div>
+          {/* Calendar preview removed per dashboard redesign */}
 
           {/* Footer */}
           <div className="p-4 border-t border-border">

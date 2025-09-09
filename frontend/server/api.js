@@ -5,6 +5,7 @@ import http from 'http'
 import { parse as parseUrl } from 'url'
 import jwt from 'jsonwebtoken'
 import ical from 'ical'
+import { createClient } from '@supabase/supabase-js'
 import dotenv from 'dotenv'
 
 dotenv.config({ path: '.env' })
@@ -167,6 +168,123 @@ const server = http.createServer(async (req, res) => {
 
     if (pathname === '/api/health' && req.method === 'GET') {
         return json(res, 200, { status: 'ok', secret: Boolean(SECRET) })
+    }
+
+    // Tasks CRUD (requires Supabase auth via Authorization: Bearer <access_token>)
+    if (pathname && pathname.startsWith('/api/calendar/tasks')) {
+        const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
+        const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+        if (!supabaseUrl || !supabaseAnonKey) {
+            return json(res, 500, { error: 'server_not_configured' })
+        }
+
+        // Extract JWT from Authorization header or cookies
+        const getJwt = () => {
+            const authHeader = Array.isArray(req.headers['authorization']) ? req.headers['authorization'][0] : req.headers['authorization']
+            if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) {
+                return authHeader.slice(7)
+            }
+            const cookie = Array.isArray(req.headers['cookie']) ? req.headers['cookie'].join(';') : (req.headers['cookie'] || '')
+            if (cookie) {
+                const parts = Object.fromEntries(cookie.split(';').map(c => {
+                    const i = c.indexOf('=');
+                    const k = c.slice(0, i).trim();
+                    const v = decodeURIComponent(c.slice(i + 1));
+                    return [k, v]
+                }))
+                if (parts['sb-access-token']) return parts['sb-access-token']
+                if (parts['supabase-auth-token']) {
+                    try {
+                        const parsed = JSON.parse(parts['supabase-auth-token'])
+                        if (parsed?.currentSession?.access_token) return parsed.currentSession.access_token
+                        if (parsed?.access_token) return parsed.access_token
+                    } catch { }
+                }
+            }
+            return ''
+        }
+
+        const accessToken = getJwt()
+        if (!accessToken) return json(res, 401, { error: 'unauthorized' })
+
+        const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+            global: { headers: { Authorization: `Bearer ${accessToken}` } },
+        })
+        const { data: userRes } = await supabase.auth.getUser()
+        const user = userRes?.user
+        if (!user) return json(res, 401, { error: 'unauthorized' })
+
+        // Parse id if present
+        const parts = pathname.split('/').filter(Boolean) // [api, calendar, tasks, id?]
+        const id = parts[3]
+
+        // Helpers for from/to with defaults (next 30 days)
+        const parseIsoOrNull = (s) => { try { return s ? new Date(s).toISOString() : null } catch { return null } }
+        const fromParam = typeof query?.from === 'string' ? parseIsoOrNull(query.from) : null
+        const toParam = typeof query?.to === 'string' ? parseIsoOrNull(query.to) : null
+        const now = new Date()
+        const defaultFrom = new Date(now.getTime())
+        const defaultTo = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
+        const fromIso = fromParam || defaultFrom.toISOString()
+        const toIso = toParam || defaultTo.toISOString()
+
+        if (req.method === 'GET' && (!id || id === '')) {
+            try {
+                let q = supabase
+                    .from('tasks')
+                    .select('*')
+                    .order('due_at', { ascending: true })
+                if (fromIso) q = q.gte('due_at', fromIso)
+                if (toIso) q = q.lte('due_at', toIso)
+                const { data, error } = await q
+                if (error) return json(res, 500, { error: 'db_error' })
+                return json(res, 200, { tasks: data || [] })
+            } catch {
+                return json(res, 500, { error: 'unknown' })
+            }
+        }
+
+        if (req.method === 'POST' && (!id || id === '')) {
+            try {
+                const body = await parseBody(req)
+                const title = typeof body?.title === 'string' ? body.title.trim() : ''
+                const due_at = typeof body?.due_at === 'string' ? body.due_at : null
+                const document_id = typeof body?.document_id === 'string' ? body.document_id : null
+                if (!title) return json(res, 400, { error: 'invalid_title' })
+                const payload = { title, due_at, document_id }
+                const { data, error } = await supabase.from('tasks').insert(payload).select('*').single()
+                if (error) return json(res, 500, { error: 'db_error' })
+                return json(res, 200, { task: data })
+            } catch {
+                return json(res, 400, { error: 'bad_request' })
+            }
+        }
+
+        if (req.method === 'PATCH' && id) {
+            try {
+                const body = await parseBody(req)
+                const update = {}
+                if (typeof body?.title === 'string') update.title = body.title.trim()
+                if (typeof body?.due_at === 'string' || body?.due_at === null) update.due_at = body.due_at
+                if (typeof body?.status === 'string') update.status = body.status
+                if (typeof body?.document_id === 'string' || body?.document_id === null) update.document_id = body.document_id
+                const { data, error } = await supabase.from('tasks').update(update).eq('id', id).select('*').single()
+                if (error) return json(res, 500, { error: 'db_error' })
+                return json(res, 200, { task: data })
+            } catch {
+                return json(res, 400, { error: 'bad_request' })
+            }
+        }
+
+        if (req.method === 'DELETE' && id) {
+            const { error } = await supabase.from('tasks').delete().eq('id', id)
+            if (error) return json(res, 500, { error: 'db_error' })
+            return json(res, 200, { ok: true })
+        }
+
+        // Method not allowed or route not found
+        res.writeHead(404, { 'Content-Type': 'application/json' })
+        return res.end('{"error":"not_found"}')
     }
 
     if (pathname === '/api/feeds/token' && req.method === 'POST') {
