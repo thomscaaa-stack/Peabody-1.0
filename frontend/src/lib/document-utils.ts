@@ -41,15 +41,9 @@ export interface DocumentInsertPayload {
  */
 function validateFile(file: File): void {
     const maxSize = 100 * 1024 * 1024 // 100MB
-
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-        throw new Error('Only PDF files are allowed')
-    }
-
     if (file.size > maxSize) {
         throw new Error('File size exceeds 100MB limit')
     }
-
     if (!file.name || !file.size) {
         throw new Error('Invalid file: missing required properties')
     }
@@ -74,14 +68,27 @@ export async function createDocumentRecord(
 ): Promise<{ doc: Document; filePath: string; docId: string }> {
     // Validate file before processing
     validateFile(file)
-    
+
     // Generate client UUID for the document
     const docId = crypto.randomUUID()
     const fileName = file.name
     const fileType = file.type || 'application/pdf'
     const fileSize = file.size
     const sanitizedFileName = sanitizeFileName(fileName)
-    const filePath = `${userId}/${docId}/${sanitizedFileName}`
+    // Dedicated workspace/project folder structure
+    // workspaceId is resolved from localStorage or env, with a safe default
+    let workspaceId = 'default'
+    if (typeof window !== 'undefined') {
+        workspaceId = window.localStorage.getItem('workspace:id')
+            || (window.localStorage.getItem('workspaceId') as string)
+            || workspaceId
+    }
+    // Vite env override
+    // @ts-ignore
+    const envWorkspace = (typeof import.meta !== 'undefined' && (import.meta as any)?.env?.VITE_WORKSPACE_ID) || undefined
+    if (envWorkspace) workspaceId = envWorkspace as string
+    // Final, clean path: workspace/<workspaceId>/uploads/<docId>/<file>
+    const filePath = `workspace/${workspaceId}/uploads/${docId}/${sanitizedFileName}`
     const title = fileName.replace(/\.pdf$/i, '')
 
     // Build payload with only fields that exist in the documents table

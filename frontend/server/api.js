@@ -5,6 +5,7 @@ import http from 'http'
 import { parse as parseUrl } from 'url'
 import jwt from 'jsonwebtoken'
 import ical from 'ical'
+import OpenAI from 'openai'
 import { createClient } from '@supabase/supabase-js'
 import dotenv from 'dotenv'
 
@@ -159,6 +160,10 @@ async function fetchIcsWithTimeout(url, timeoutMs = 10_000) {
 
 const server = http.createServer(async (req, res) => {
     const { pathname, query } = parseUrl(req.url || '', true)
+    // Dev routing trace
+    if (process.env.NODE_ENV !== 'production') {
+        try { console.log(`[api] ${req.method} ${pathname}`) } catch { }
+    }
 
     // CORS for local dev only
     res.setHeader('Access-Control-Allow-Origin', 'http://localhost:5173')
@@ -285,6 +290,137 @@ const server = http.createServer(async (req, res) => {
         // Method not allowed or route not found
         res.writeHead(404, { 'Content-Type': 'application/json' })
         return res.end('{"error":"not_found"}')
+    }
+
+    // Document embeddings pipeline: POST /api/documents/:id/embed
+    if (req.method === 'POST' && pathname && pathname.startsWith('/api/documents/') && pathname.endsWith('/embed')) {
+        const parts = (pathname || '').split('/').filter(Boolean)
+        const documentId = parts[2]
+        if (!documentId) return json(res, 400, { error: 'invalid_document_id' })
+
+        // Auth
+        const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL
+        const supabaseAnonKey = process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY
+        if (!supabaseUrl || !supabaseAnonKey) return json(res, 500, { error: 'server_not_configured' })
+
+        const getJwt = () => {
+            const authHeader = Array.isArray(req.headers['authorization']) ? req.headers['authorization'][0] : req.headers['authorization']
+            if (authHeader && authHeader.toLowerCase().startsWith('bearer ')) return authHeader.slice(7)
+            const cookie = Array.isArray(req.headers['cookie']) ? req.headers['cookie'].join(';') : (req.headers['cookie'] || '')
+            if (cookie) {
+                const parts = Object.fromEntries(cookie.split(';').map(c => { const i = c.indexOf('='); const k = c.slice(0, i).trim(); const v = decodeURIComponent(c.slice(i + 1)); return [k, v] }))
+                if (parts['sb-access-token']) return parts['sb-access-token']
+                if (parts['supabase-auth-token']) { try { const parsed = JSON.parse(parts['supabase-auth-token']); return parsed?.currentSession?.access_token || parsed?.access_token || '' } catch { } }
+            }
+            return ''
+        }
+        const accessToken = getJwt()
+        if (!accessToken) return json(res, 401, { error: 'unauthorized' })
+        const supabase = (await import('@supabase/supabase-js')).createClient(supabaseUrl, supabaseAnonKey, { global: { headers: { Authorization: `Bearer ${accessToken}` } } })
+        const { data: userRes } = await supabase.auth.getUser(); if (!userRes?.user) return json(res, 401, { error: 'unauthorized' })
+
+        // 1) Load pages text
+        const { data: pages, error: pagesErr } = await supabase
+            .from('document_pages')
+            .select('page_number, text')
+            .eq('document_id', documentId)
+            .order('page_number', { ascending: true })
+        if (pagesErr) return json(res, 500, { error: 'load_pages_failed' })
+        if (!pages || pages.length === 0) return json(res, 400, { error: 'no_pages' })
+
+        // 2) Chunking (server-side)
+        function chunkTextServer(text, targetTokens = 500, overlapTokens = 50) {
+            const chunks = []
+            const words = String(text || '').split(/\s+/)
+            let current = []
+            let tokenCount = 0
+            let idx = 0
+            for (const w of words) {
+                const t = Math.ceil((w || '').length / 4)
+                if (tokenCount + t > targetTokens && current.length > 0) {
+                    chunks.push({ content: current.join(' '), tokenCount, chunkIndex: idx++ })
+                    const overlapWords = Math.floor(overlapTokens / 1.3)
+                    current = current.slice(-overlapWords)
+                    tokenCount = current.reduce((s, x) => s + Math.ceil(x.length / 4), 0)
+                }
+                if (w) { current.push(w); tokenCount += t }
+            }
+            if (current.length > 0) chunks.push({ content: current.join(' '), tokenCount, chunkIndex: idx })
+            return chunks
+        }
+
+        const allChunks = []
+        for (const p of pages) {
+            const chunks = chunkTextServer(p.text || '')
+            for (const ch of chunks) {
+                const content = String(ch.content || '').replace(/[\u0000-\u001F\u007F]/g, ' ').replace(/\s+/g, ' ').trim()
+                if (!content) continue
+                allChunks.push({ content, tokenCount: ch.tokenCount, pageNumber: p.page_number, chunkIndex: ch.chunkIndex })
+            }
+        }
+        if (allChunks.length === 0) {
+            // No extractable text; mark as ready without embeddings
+            await supabase.from('documents').update({ status: 'ready' }).eq('id', documentId)
+            return json(res, 200, { ok: true, chunks: 0 })
+        }
+
+        // 3) Embeddings (server-side)
+        const openaiKey = process.env.OPENAI_API_KEY || process.env.VITE_OPENAI_API_KEY
+        if (!openaiKey) return json(res, 500, { error: 'openai_not_configured' })
+        const openai = new OpenAI({ apiKey: openaiKey })
+        const model = 'text-embedding-3-small' // 1536 dims
+        const batchSize = 64
+        const results = []
+        for (let i = 0; i < allChunks.length; i += batchSize) {
+            const batch = allChunks.slice(i, i + batchSize)
+            const input = batch.map(b => b.content)
+            // Normalize input: ensure non-empty strings
+            const safe = input.map(s => (typeof s === 'string' ? s.trim() : '')).map(s => s.length > 8192 ? s.slice(0, 8192) : s).filter(Boolean)
+            if (safe.length === 0) continue
+            const resp = await openai.embeddings.create({ model, input: safe, encoding_format: 'float' })
+            let k = 0
+            for (let j = 0; j < batch.length; j++) {
+                const emb = resp.data[k]?.embedding
+                if (Array.isArray(emb)) {
+                    results.push({ idx: i + j, embedding: emb })
+                    k++
+                } else {
+                    results.push({ idx: i + j, embedding: null })
+                }
+            }
+        }
+
+        // 4) Persist chunks (delete existing then insert)
+        await supabase.from('document_chunks').delete().eq('document_id', documentId)
+        const inserts = []
+        for (let i = 0; i < allChunks.length; i++) {
+            const r = results.find(x => x.idx === i)
+            if (!r || !Array.isArray(r.embedding)) continue
+            const ch = allChunks[i]
+            inserts.push({
+                document_id: documentId,
+                page_number: ch.pageNumber,
+                chunk_index: ch.chunkIndex,
+                content: ch.content,
+                token_count: ch.tokenCount,
+                embedding: r.embedding
+            })
+        }
+        if (inserts.length > 0) {
+            const { error: insErr } = await supabase.from('document_chunks').insert(inserts)
+            if (insErr) return json(res, 500, { error: 'insert_chunks_failed' })
+        }
+
+        // 5) Finalize document status
+        await supabase.from('documents').update({ status: 'ready' }).eq('id', documentId)
+        return json(res, 200, { ok: true, chunks: inserts.length })
+    }
+
+    // Back-compat: POST /api/documents/:id → 307 redirect to /embed
+    if (req.method === 'POST' && pathname && /^\/api\/documents\/[^/]+$/.test(pathname)) {
+        const location = (pathname || '') + '/embed'
+        res.writeHead(307, { Location: location })
+        return res.end()
     }
 
     if (pathname === '/api/feeds/token' && req.method === 'POST') {

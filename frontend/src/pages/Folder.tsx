@@ -3,6 +3,7 @@ import SearchInput from '@/components/SearchInput'
 import DocumentList from '@/components/DocumentList'
 import type { Document as PdfDocument, DocItem } from '@/lib/types'
 import PDFReader from '@/components/PDFReader'
+import PDFUpload from '@/components/PDFUpload'
 import SplitPane from '@/components/SplitPane'
 import NoteCard, { NoteItem } from '@/components/NoteCard'
 import NotesEditor from '@/components/NotesEditor'
@@ -23,6 +24,8 @@ export default function FolderPage() {
     const [documents, setDocuments] = useState<DocItem[]>([])
     const [notes, setNotes] = useState<NoteItem[]>([])
     const [meta, setMeta] = useState<{ docs: number; notes: number }>({ docs: 0, notes: 0 })
+    const [showUpload, setShowUpload] = useState(false)
+    const [refreshTrigger, setRefreshTrigger] = useState<number>(0)
     const [isDesktop, setIsDesktop] = useState<boolean>(typeof window !== 'undefined' ? window.innerWidth >= 1024 : true)
 
     useEffect(() => {
@@ -184,10 +187,24 @@ export default function FolderPage() {
                     <div className="space-y-4 mt-8">
                         <div className="flex items-center justify-between">
                             <h2 className="text-lg font-semibold text-gray-900">Study Materials</h2>
-                            <button className="rounded-lg bg-blue-600 text-white px-3 py-1.5 text-sm hover:bg-blue-700" onClick={() => setSelectedNote({ id: null, title: '', content: '<p></p>' })}>New Note</button>
+                            <div className="flex items-center gap-2">
+                                <button className="rounded-lg border px-3 py-1.5 text-sm hover:shadow-sm" onClick={() => setShowUpload((v) => !v)}>Upload PDF</button>
+                                <button className="rounded-lg bg-blue-600 text-white px-3 py-1.5 text-sm hover:bg-blue-700" onClick={() => setSelectedNote({ id: null, title: '', content: '<p></p>' })}>New Note</button>
+                            </div>
                         </div>
+                        {showUpload && (
+                            <div className="border rounded-xl p-4">
+                                <PDFUpload
+                                    onUploadComplete={(doc) => {
+                                        setShowUpload(false)
+                                        setRefreshTrigger(Date.now())
+                                        setSelectedDocument(doc as any)
+                                    }}
+                                />
+                            </div>
+                        )}
                         <SearchInput value={query} onChange={setQuery} />
-                        <DocumentList onDocumentSelect={(doc) => setSelectedDocument(doc as any)} />
+                        <DocumentList onDocumentSelect={(doc) => setSelectedDocument(doc as any)} refreshTrigger={refreshTrigger} />
                         <div className="text-xs font-medium text-gray-500 tracking-wide mt-6">RECENT NOTES</div>
                         <div className="space-y-2">
                             {filteredNotes.map(n => (
@@ -202,10 +219,24 @@ export default function FolderPage() {
                     <div className="space-y-4">
                         <div className="flex items-center justify-between">
                             <h2 className="text-lg font-semibold text-gray-900">Study Materials</h2>
-                            <button className="rounded-lg bg-blue-600 text-white px-3 py-1.5 text-sm hover:bg-blue-700" onClick={() => setSelectedNote({ id: null, title: '', content: '<p></p>' })}>New Note</button>
+                            <div className="flex items-center gap-2">
+                                <button className="rounded-lg border px-3 py-1.5 text-sm hover:shadow-sm" onClick={() => setShowUpload((v) => !v)}>Upload PDF</button>
+                                <button className="rounded-lg bg-blue-600 text-white px-3 py-1.5 text-sm hover:bg-blue-700" onClick={() => setSelectedNote({ id: null, title: '', content: '<p></p>' })}>New Note</button>
+                            </div>
                         </div>
+                        {showUpload && (
+                            <div className="border rounded-xl p-4">
+                                <PDFUpload
+                                    onUploadComplete={(doc) => {
+                                        setShowUpload(false)
+                                        setRefreshTrigger(Date.now())
+                                        setSelectedDocument(doc as any)
+                                    }}
+                                />
+                            </div>
+                        )}
                         <SearchInput value={query} onChange={setQuery} />
-                        <DocumentList onDocumentSelect={(doc) => setSelectedDocument(doc as any)} />
+                        <DocumentList onDocumentSelect={(doc) => setSelectedDocument(doc as any)} refreshTrigger={refreshTrigger} />
                         <div className="text-xs font-medium text-gray-500 tracking-wide mt-6">RECENT NOTES</div>
                         <div className="space-y-2">
                             {filteredNotes.map(n => (

@@ -14,6 +14,13 @@ export function useCanvasEvents(fromIso?: string, toIso?: string) {
                 setLoading(true)
                 setError(null)
                 const res = await fetch(`/api/feeds/events?token=${encodeURIComponent(t)}`)
+                if (res.status === 401) {
+                    // token invalid/expired → clear and stop retry storms
+                    localStorage.removeItem('canvasIcsToken')
+                    setEvents([])
+                    setError('Connection expired')
+                    return
+                }
                 if (!res.ok) throw new Error('Failed to load events')
                 const data = await res.json()
                 setEvents(Array.isArray(data?.events) ? data.events : [])

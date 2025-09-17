@@ -15,9 +15,17 @@ export type UnifiedItem = {
 
 export function normalizeAll(args: { canvas: CalendarEvent[]; tasks: TaskItem[]; sessions: StudySession[] }): UnifiedItem[] {
     const out: UnifiedItem[] = []
+    let completedIds: Set<string> = new Set()
+    if (typeof window !== 'undefined') {
+        try {
+            const raw = window.localStorage.getItem('calendar:completed')
+            if (raw) completedIds = new Set(JSON.parse(raw))
+        } catch { }
+    }
     for (const e of args.canvas || []) {
         const { courseId, courseName } = extractCourse(e.title)
-        out.push({ id: e.id, source: 'canvas', title: e.title, courseId, courseName, start: e.start, end: e.end })
+        const done = completedIds.has(String(e.id))
+        out.push({ id: e.id, source: 'canvas', title: e.title, courseId, courseName, start: e.start, end: e.end, status: done ? 'done' : undefined })
     }
     for (const t of args.tasks || []) {
         out.push({ id: String(t.id), source: 'task', title: t.title, due_at: t.due_at, status: (t.status as any) || 'todo', courseName: 'General' })

@@ -97,46 +97,17 @@ export default function PDFUpload({ onUploadComplete, onProgress }: PDFUploadPro
                 throw new Error(`Failed to store document pages: ${pagesError.message}`)
             }
 
-            // Create chunks and generate embeddings
-            updateProgress('embedding', 80, 'Creating text chunks...')
-            const allChunks: Array<{ content: string; tokenCount: number; pageNumber: number; chunkIndex: number }> = []
-
-            parsedDoc.pages.forEach(page => {
-                const chunks = chunkText(page.text, 500, 50)
-                chunks.forEach(chunk => {
-                    allChunks.push({
-                        ...chunk,
-                        pageNumber: page.pageNumber
-                    })
-                })
+            // Server-side embeddings & chunk storage
+            updateProgress('embedding', 80, 'Generating embeddings...')
+            const { data: sessionRes } = await supabase.auth.getSession()
+            const accessToken = sessionRes?.session?.access_token
+            const res = await fetch(`/api/documents/${docId}/embed`, {
+                method: 'POST',
+                headers: { Authorization: accessToken ? `Bearer ${accessToken}` : '' }
             })
-
-            updateProgress('embedding', 85, 'Generating embeddings...')
-            const embeddings = await batchProcessEmbeddings(
-                allChunks.map((chunk, index) => ({
-                    content: chunk.content,
-                    id: `${document.id}_${chunk.pageNumber}_${chunk.chunkIndex}`
-                }))
-            )
-
-            // Store chunks with embeddings
-            updateProgress('embedding', 90, 'Storing embeddings...')
-            const chunkInserts = allChunks.map((chunk, index) => ({
-                document_id: docId,
-                page_number: chunk.pageNumber,
-                chunk_index: chunk.chunkIndex,
-                content: chunk.content,
-                token_count: chunk.tokenCount,
-                embedding: embeddings[index]?.embedding
-            }))
-
-            const { error: chunksError } = await supabase
-                .from('document_chunks')
-                .insert(chunkInserts)
-
-            if (chunksError) {
-                console.error('Chunks insertion failed:', chunksError)
-                throw new Error(`Failed to store document chunks: ${chunksError.message}`)
+            if (!res.ok) {
+                const msg = await res.text().catch(() => 'Embedding failed')
+                throw new Error(msg || 'Embedding failed')
             }
 
             // Finalize document

@@ -74,7 +74,23 @@ export default function UpcomingDeadlinesCard() {
                                             {tag && <Badge variant="secondary" className="mr-2">{tag}</Badge>}
                                             <span className="text-[12px] text-gray-800 line-clamp-1">{title}</span>
                                         </div>
-                                        <div className="text-xs text-muted-foreground whitespace-nowrap ml-2">{when ? new Date(when).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : ''}</div>
+                                        <div className="flex items-center gap-3">
+                                            <button
+                                                className="text-xs text-gray-600 hover:text-green-700"
+                                                onClick={() => {
+                                                    try {
+                                                        const raw = localStorage.getItem('calendar:completed')
+                                                        const set = new Set<string>(raw ? JSON.parse(raw) : [])
+                                                        set.add(String(it.id))
+                                                        localStorage.setItem('calendar:completed', JSON.stringify(Array.from(set)))
+                                                    } catch { }
+                                                    // force a refresh of hooks that fetch on focus
+                                                    window.dispatchEvent(new Event('focus'))
+                                                }}
+                                                title="Mark as complete"
+                                            >✓</button>
+                                            <div className="text-xs text-muted-foreground whitespace-nowrap ml-2">{when ? new Date(when).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' }) : ''}</div>
+                                        </div>
                                     </div>
                                 )
                             })}

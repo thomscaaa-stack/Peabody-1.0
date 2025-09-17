@@ -4,26 +4,16 @@ import type { AIAnswer, SearchResult } from './types'
 // Mentor: imports
 import { buildMentorMessages, deSycophantize, StudyPlanSchema, mentorTools } from './mentor'
 
-// Initialize OpenAI client
+// Initialize OpenAI client (kept for chat/QA; embeddings moved server-side)
 const openai = new OpenAI({
     apiKey: import.meta.env.VITE_OPENAI_API_KEY,
-    dangerouslyAllowBrowser: true // Note: In production, this should be server-side
+    dangerouslyAllowBrowser: true
 })
 
 // Generate embeddings for text chunks
-export async function generateEmbeddings(texts: string[]): Promise<number[][]> {
-    try {
-        const response = await openai.embeddings.create({
-            model: 'text-embedding-3-small',
-            input: texts,
-            encoding_format: 'float'
-        })
-
-        return response.data.map(item => item.embedding)
-    } catch (error) {
-        console.error('Error generating embeddings:', error)
-        throw new Error('Failed to generate embeddings')
-    }
+// Embeddings are now server-side only
+export async function generateEmbeddings(_texts: string[]): Promise<number[][]> {
+    throw new Error('Embeddings must be generated server-side')
 }
 
 // Search for relevant document chunks
@@ -258,35 +248,8 @@ async function generateGeneralAnswer(query: string): Promise<AIAnswer> {
 }
 
 // Batch process embeddings for multiple chunks
-export async function batchProcessEmbeddings(chunks: Array<{ content: string; id: string }>) {
-    const batchSize = 10 // OpenAI allows up to 100, but we'll be conservative
-    const results: Array<{ id: string; embedding: number[] }> = []
-
-    for (let i = 0; i < chunks.length; i += batchSize) {
-        const batch = chunks.slice(i, i + batchSize)
-        const texts = batch.map(chunk => chunk.content)
-
-        try {
-            const embeddings = await generateEmbeddings(texts)
-
-            batch.forEach((chunk, index) => {
-                results.push({
-                    id: chunk.id,
-                    embedding: embeddings[index]
-                })
-            })
-
-            // Add delay between batches to respect rate limits
-            if (i + batchSize < chunks.length) {
-                await new Promise(resolve => setTimeout(resolve, 1000))
-            }
-        } catch (error) {
-            console.error(`Error processing batch ${i / batchSize + 1}:`, error)
-            throw error
-        }
-    }
-
-    return results
+export async function batchProcessEmbeddings(_chunks: Array<{ content: string; id: string }>) {
+    throw new Error('Embeddings must be generated server-side')
 }
 
 // Streamed answer generation (token-by-token)
